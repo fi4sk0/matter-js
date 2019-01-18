@@ -1,5 +1,5 @@
 /**
-* matter-js 0.14.2 by @liabru 2018-06-11
+* matter-js 0.14.2 by @liabru 2019-01-18
 * http://brm.io/matter-js/
 * License MIT
 */
@@ -80,6 +80,7 @@ var Axes = _dereq_('../geometry/Axes');
             force: { x: 0, y: 0 },
             torque: 0,
             positionImpulse: { x: 0, y: 0 },
+            previousPositionImpulse: { x: 0, y: 0 },
             constraintImpulse: { x: 0, y: 0, angle: 0 },
             totalContacts: 0,
             speed: 0,
@@ -113,7 +114,19 @@ var Axes = _dereq_('../geometry/Axes');
                     yOffset: 0
                 },
                 lineWidth: 0
-            }
+            },
+            events: null,
+            bounds: null,
+            chamfer: null,
+            circleRadius: 0,
+            positionPrev: null,
+            anglePrev: 0,
+            parent: null,
+            axes: null,
+            area: 0,
+            mass: 0,
+            inertia: 0,
+            _original: null
         };
 
         var body = Common.extend(defaults, options);
@@ -210,11 +223,11 @@ var Axes = _dereq_('../geometry/Axes');
         }
 
         for (property in settings) {
-            value = settings[property];
 
             if (!settings.hasOwnProperty(property))
                 continue;
 
+            value = settings[property];
             switch (property) {
 
             case 'isStatic':
@@ -300,7 +313,7 @@ var Axes = _dereq_('../geometry/Axes');
                 part.inverseMass = part._original.inverseMass;
                 part.inverseInertia = part._original.inverseInertia;
 
-                delete part._original;
+                part._original = null;
             }
         }
     };
@@ -333,7 +346,7 @@ var Axes = _dereq_('../geometry/Axes');
     };
 
     /**
-     * Sets the moment of inertia (i.e. second moment of area) of the body of the body. 
+     * Sets the moment of inertia (i.e. second moment of area) of the body. 
      * Inverse inertia is automatically updated to reflect the change. Mass is not changed.
      * @method setInertia
      * @param {body} body
@@ -1222,7 +1235,7 @@ var Axes = _dereq_('../geometry/Axes');
 
 })();
 
-},{"../core/Common":14,"../core/Sleeping":22,"../geometry/Axes":25,"../geometry/Bounds":26,"../geometry/Vector":28,"../geometry/Vertices":29,"../render/Render":31}],2:[function(_dereq_,module,exports){
+},{"../core/Common":13,"../core/Sleeping":21,"../geometry/Axes":24,"../geometry/Bounds":25,"../geometry/Vector":27,"../geometry/Vertices":28,"../render/Render":30}],2:[function(_dereq_,module,exports){
 /**
 * The `Matter.Composite` module contains methods for creating and manipulating composite bodies.
 * A composite body is a collection of `Matter.Body`, `Matter.Constraint` and other `Matter.Composite`, therefore composites form a tree structure.
@@ -1909,7 +1922,7 @@ var Body = _dereq_('./Body');
 
 })();
 
-},{"../core/Common":14,"../core/Events":16,"../geometry/Bounds":26,"./Body":1}],3:[function(_dereq_,module,exports){
+},{"../core/Common":13,"../core/Events":15,"../geometry/Bounds":25,"./Body":1}],3:[function(_dereq_,module,exports){
 /**
 * The `Matter.World` module contains methods for creating and manipulating the world composite.
 * A `Matter.World` is a `Matter.Composite` body, which is a collection of `Matter.Body`, `Matter.Constraint` and other `Matter.Composite`.
@@ -2058,47 +2071,7 @@ var Common = _dereq_('../core/Common');
 
 })();
 
-},{"../constraint/Constraint":12,"../core/Common":14,"./Composite":2}],4:[function(_dereq_,module,exports){
-/**
-* The `Matter.Contact` module contains methods for creating and manipulating collision contacts.
-*
-* @class Contact
-*/
-
-var Contact = {};
-
-module.exports = Contact;
-
-(function() {
-
-    /**
-     * Creates a new contact.
-     * @method create
-     * @param {vertex} vertex
-     * @return {contact} A new contact
-     */
-    Contact.create = function(vertex) {
-        return {
-            id: Contact.id(vertex),
-            vertex: vertex,
-            normalImpulse: 0,
-            tangentImpulse: 0
-        };
-    };
-    
-    /**
-     * Generates a contact id.
-     * @method id
-     * @param {vertex} vertex
-     * @return {string} Unique contactID
-     */
-    Contact.id = function(vertex) {
-        return vertex.body.id + '_' + vertex.index;
-    };
-
-})();
-
-},{}],5:[function(_dereq_,module,exports){
+},{"../constraint/Constraint":11,"../core/Common":13,"./Composite":2}],4:[function(_dereq_,module,exports){
 /**
 * The `Matter.Detector` module contains methods for detecting collisions given a set of pairs.
 *
@@ -2193,7 +2166,7 @@ var Bounds = _dereq_('../geometry/Bounds');
 
 })();
 
-},{"../geometry/Bounds":26,"./Pair":7,"./SAT":11}],6:[function(_dereq_,module,exports){
+},{"../geometry/Bounds":25,"./Pair":6,"./SAT":10}],5:[function(_dereq_,module,exports){
 /**
 * The `Matter.Grid` module contains methods for creating and manipulating collision broadphase grid structures.
 *
@@ -2509,7 +2482,7 @@ var Common = _dereq_('../core/Common');
     
 })();
 
-},{"../core/Common":14,"./Detector":5,"./Pair":7}],7:[function(_dereq_,module,exports){
+},{"../core/Common":13,"./Detector":4,"./Pair":6}],6:[function(_dereq_,module,exports){
 /**
 * The `Matter.Pair` module contains methods for creating and manipulating collision pairs.
 *
@@ -2519,8 +2492,6 @@ var Common = _dereq_('../core/Common');
 var Pair = {};
 
 module.exports = Pair;
-
-var Contact = _dereq_('./Contact');
 
 (function() {
     
@@ -2533,26 +2504,25 @@ var Contact = _dereq_('./Contact');
      */
     Pair.create = function(collision, timestamp) {
         var bodyA = collision.bodyA,
-            bodyB = collision.bodyB,
-            parentA = collision.parentA,
-            parentB = collision.parentB;
+            bodyB = collision.bodyB;
 
         var pair = {
             id: Pair.id(bodyA, bodyB),
             bodyA: bodyA,
             bodyB: bodyB,
-            contacts: {},
             activeContacts: [],
             separation: 0,
             isActive: true,
+            confirmedActive: true,
             isSensor: bodyA.isSensor || bodyB.isSensor,
             timeCreated: timestamp,
             timeUpdated: timestamp,
-            inverseMass: parentA.inverseMass + parentB.inverseMass,
-            friction: Math.min(parentA.friction, parentB.friction),
-            frictionStatic: Math.max(parentA.frictionStatic, parentB.frictionStatic),
-            restitution: Math.max(parentA.restitution, parentB.restitution),
-            slop: Math.max(parentA.slop, parentB.slop)
+            collision: null,
+            inverseMass: 0,
+            friction: 0,
+            frictionStatic: 0,
+            restitution: 0,
+            slop: 0
         };
 
         Pair.update(pair, collision, timestamp);
@@ -2568,31 +2538,28 @@ var Contact = _dereq_('./Contact');
      * @param {number} timestamp
      */
     Pair.update = function(pair, collision, timestamp) {
-        var contacts = pair.contacts,
-            supports = collision.supports,
-            activeContacts = pair.activeContacts,
-            parentA = collision.parentA,
-            parentB = collision.parentB;
-        
         pair.collision = collision;
-        pair.inverseMass = parentA.inverseMass + parentB.inverseMass;
-        pair.friction = Math.min(parentA.friction, parentB.friction);
-        pair.frictionStatic = Math.max(parentA.frictionStatic, parentB.frictionStatic);
-        pair.restitution = Math.max(parentA.restitution, parentB.restitution);
-        pair.slop = Math.max(parentA.slop, parentB.slop);
-        activeContacts.length = 0;
-        
-        if (collision.collided) {
-            for (var i = 0; i < supports.length; i++) {
-                var support = supports[i],
-                    contactId = Contact.id(support),
-                    contact = contacts[contactId];
 
-                if (contact) {
-                    activeContacts.push(contact);
-                } else {
-                    activeContacts.push(contacts[contactId] = Contact.create(support));
-                }
+        if (collision.collided) {
+            var supports = collision.supports,
+                activeContacts = pair.activeContacts,
+                parentA = collision.parentA,
+                parentB = collision.parentB;
+
+            pair.inverseMass = parentA.inverseMass + parentB.inverseMass;
+            pair.friction = Math.min(parentA.friction, parentB.friction);
+            pair.frictionStatic = Math.max(parentA.frictionStatic, parentB.frictionStatic);
+            pair.restitution = Math.max(parentA.restitution, parentB.restitution);
+            pair.slop = Math.max(parentA.slop, parentB.slop);
+
+            for (var i = 0; i < supports.length; i++) {
+                activeContacts[i] = supports[i].contact;
+            }
+
+            // optimise array size
+            var supportCount = supports.length;
+            if (supportCount < activeContacts.length) {
+                activeContacts.length = supportCount;
             }
 
             pair.separation = collision.depth;
@@ -2636,8 +2603,7 @@ var Contact = _dereq_('./Contact');
     };
 
 })();
-
-},{"./Contact":4}],8:[function(_dereq_,module,exports){
+},{}],7:[function(_dereq_,module,exports){
 /**
 * The `Matter.Pairs` module contains methods for creating and manipulating collision pair sets.
 *
@@ -2684,7 +2650,6 @@ var Common = _dereq_('../core/Common');
             collisionStart = pairs.collisionStart,
             collisionEnd = pairs.collisionEnd,
             collisionActive = pairs.collisionActive,
-            activePairIds = [],
             collision,
             pairId,
             pair,
@@ -2695,12 +2660,15 @@ var Common = _dereq_('../core/Common');
         collisionEnd.length = 0;
         collisionActive.length = 0;
 
+        for (i = 0; i < pairsList.length; i++) {
+            pairsList[i].confirmedActive = false;
+        }
+
         for (i = 0; i < collisions.length; i++) {
             collision = collisions[i];
 
             if (collision.collided) {
                 pairId = Pair.id(collision.bodyA, collision.bodyB);
-                activePairIds.push(pairId);
 
                 pair = pairsTable[pairId];
                 
@@ -2716,6 +2684,7 @@ var Common = _dereq_('../core/Common');
 
                     // update the pair
                     Pair.update(pair, collision, timestamp);
+                    pair.confirmedActive = true;
                 } else {
                     // pair did not exist, create a new pair
                     pair = Pair.create(collision, timestamp);
@@ -2731,7 +2700,7 @@ var Common = _dereq_('../core/Common');
         // deactivate previously active pairs that are now inactive
         for (i = 0; i < pairsList.length; i++) {
             pair = pairsList[i];
-            if (pair.isActive && Common.indexOf(activePairIds, pair.id) === -1) {
+            if (pair.isActive && !pair.confirmedActive) {
                 Pair.setActive(pair, false, timestamp);
                 collisionEnd.push(pair);
             }
@@ -2795,7 +2764,7 @@ var Common = _dereq_('../core/Common');
 
 })();
 
-},{"../core/Common":14,"./Pair":7}],9:[function(_dereq_,module,exports){
+},{"../core/Common":13,"./Pair":6}],8:[function(_dereq_,module,exports){
 /**
 * The `Matter.Query` module contains methods for performing collision queries.
 *
@@ -2927,7 +2896,7 @@ var Vertices = _dereq_('../geometry/Vertices');
 
 })();
 
-},{"../factory/Bodies":23,"../geometry/Bounds":26,"../geometry/Vector":28,"../geometry/Vertices":29,"./SAT":11}],10:[function(_dereq_,module,exports){
+},{"../factory/Bodies":22,"../geometry/Bounds":25,"../geometry/Vector":27,"../geometry/Vertices":28,"./SAT":10}],9:[function(_dereq_,module,exports){
 /**
 * The `Matter.Resolver` module contains methods for resolving collision pairs.
 *
@@ -2978,23 +2947,33 @@ var Bounds = _dereq_('../geometry/Bounds');
      * Find a solution for pair positions.
      * @method solvePosition
      * @param {pair[]} pairs
+     * @param {body[]} bodies
      * @param {number} timeScale
      */
-    Resolver.solvePosition = function(pairs, timeScale) {
+    Resolver.solvePosition = function(pairs, bodies, timeScale) {
         var i,
+            normalX,
+            normalY,
             pair,
             collision,
             bodyA,
             bodyB,
             normal,
-            bodyBtoA,
+            separation,
+            penetration,
+            positionImpulseA,
+            positionImpulseB,
             contactShare,
+            bodyBtoAX,
+            bodyBtoAY,
             positionImpulse,
-            contactCount = {},
-            tempA = Vector._temp[0],
-            tempB = Vector._temp[1],
-            tempC = Vector._temp[2],
-            tempD = Vector._temp[3];
+            impulseCoefficient = timeScale * Resolver._positionDampen;
+
+        for (i = 0; i < bodies.length; i++) {
+            var body = bodies[i];
+            body.previousPositionImpulse.x = body.positionImpulse.x;
+            body.previousPositionImpulse.y = body.positionImpulse.y;
+        }
 
         // find impulses required to resolve penetration
         for (i = 0; i < pairs.length; i++) {
@@ -3008,39 +2987,35 @@ var Bounds = _dereq_('../geometry/Bounds');
             bodyB = collision.parentB;
             normal = collision.normal;
 
-            // get current separation between body edges involved in collision
-            bodyBtoA = Vector.sub(Vector.add(bodyB.positionImpulse, bodyB.position, tempA), 
-                                    Vector.add(bodyA.positionImpulse, 
-                                        Vector.sub(bodyB.position, collision.penetration, tempB), tempC), tempD);
+            positionImpulseA = bodyA.previousPositionImpulse;
+            positionImpulseB = bodyB.previousPositionImpulse;
 
-            pair.separation = Vector.dot(normal, bodyBtoA);
-        }
-        
-        for (i = 0; i < pairs.length; i++) {
-            pair = pairs[i];
+            penetration = collision.penetration;
 
-            if (!pair.isActive || pair.isSensor)
-                continue;
-            
-            collision = pair.collision;
-            bodyA = collision.parentA;
-            bodyB = collision.parentB;
-            normal = collision.normal;
-            positionImpulse = (pair.separation - pair.slop) * timeScale;
+            bodyBtoAX = positionImpulseB.x - positionImpulseA.x + penetration.x;
+            bodyBtoAY = positionImpulseB.y - positionImpulseA.y + penetration.y;
+
+            normalX = normal.x;
+            normalY = normal.y;
+
+            separation = normalX * bodyBtoAX + normalY * bodyBtoAY;
+            pair.separation = separation;
+
+            positionImpulse = (separation - pair.slop) * impulseCoefficient;
 
             if (bodyA.isStatic || bodyB.isStatic)
                 positionImpulse *= 2;
             
             if (!(bodyA.isStatic || bodyA.isSleeping)) {
-                contactShare = Resolver._positionDampen / bodyA.totalContacts;
-                bodyA.positionImpulse.x += normal.x * positionImpulse * contactShare;
-                bodyA.positionImpulse.y += normal.y * positionImpulse * contactShare;
+                contactShare = positionImpulse / bodyA.totalContacts;
+                bodyA.positionImpulse.x += normalX * contactShare;
+                bodyA.positionImpulse.y += normalY * contactShare;
             }
 
             if (!(bodyB.isStatic || bodyB.isSleeping)) {
-                contactShare = Resolver._positionDampen / bodyB.totalContacts;
-                bodyB.positionImpulse.x -= normal.x * positionImpulse * contactShare;
-                bodyB.positionImpulse.y -= normal.y * positionImpulse * contactShare;
+                contactShare = positionImpulse / bodyB.totalContacts;
+                bodyB.positionImpulse.x -= normalX * contactShare;
+                bodyB.positionImpulse.y -= normalY * contactShare;
             }
         }
     };
@@ -3272,8 +3247,7 @@ var Bounds = _dereq_('../geometry/Bounds');
     };
 
 })();
-
-},{"../core/Common":14,"../geometry/Bounds":26,"../geometry/Vector":28,"../geometry/Vertices":29}],11:[function(_dereq_,module,exports){
+},{"../core/Common":13,"../geometry/Bounds":25,"../geometry/Vector":27,"../geometry/Vertices":28}],10:[function(_dereq_,module,exports){
 /**
 * The `Matter.SAT` module contains methods for detecting collisions using the Separating Axis Theorem.
 *
@@ -3545,7 +3519,7 @@ var Vector = _dereq_('../geometry/Vector');
 
 })();
 
-},{"../geometry/Vector":28,"../geometry/Vertices":29}],12:[function(_dereq_,module,exports){
+},{"../geometry/Vector":27,"../geometry/Vertices":28}],11:[function(_dereq_,module,exports){
 /**
 * The `Matter.Constraint` module contains methods for creating and manipulating constraints.
 * Constraints are used for specifying that a fixed distance must be maintained between two bodies (or a body and a fixed world-space position).
@@ -4000,7 +3974,7 @@ var Common = _dereq_('../core/Common');
 
 })();
 
-},{"../core/Common":14,"../core/Sleeping":22,"../geometry/Axes":25,"../geometry/Bounds":26,"../geometry/Vector":28,"../geometry/Vertices":29}],13:[function(_dereq_,module,exports){
+},{"../core/Common":13,"../core/Sleeping":21,"../geometry/Axes":24,"../geometry/Bounds":25,"../geometry/Vector":27,"../geometry/Vertices":28}],12:[function(_dereq_,module,exports){
 /**
 * The `Matter.MouseConstraint` module contains methods for creating mouse constraints.
 * Mouse constraints are used for allowing user interaction, providing the ability to move bodies via the mouse or touch.
@@ -4263,7 +4237,7 @@ var Bounds = _dereq_('../geometry/Bounds');
 
 })();
 
-},{"../body/Composite":2,"../collision/Detector":5,"../core/Common":14,"../core/Events":16,"../core/Mouse":19,"../core/Sleeping":22,"../geometry/Bounds":26,"../geometry/Vertices":29,"./Constraint":12}],14:[function(_dereq_,module,exports){
+},{"../body/Composite":2,"../collision/Detector":4,"../core/Common":13,"../core/Events":15,"../core/Mouse":18,"../core/Sleeping":21,"../geometry/Bounds":25,"../geometry/Vertices":28,"./Constraint":11}],13:[function(_dereq_,module,exports){
 (function (global){
 /**
 * The `Matter.Common` module contains utility functions that are common to all modules.
@@ -4820,7 +4794,7 @@ module.exports = Common;
 })();
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],15:[function(_dereq_,module,exports){
+},{}],14:[function(_dereq_,module,exports){
 /**
 * The `Matter.Engine` module contains methods for creating and manipulating engines.
 * An engine is a controller that manages updating the simulation of the world.
@@ -5011,7 +4985,7 @@ var Body = _dereq_('../body/Body');
         // iteratively resolve position between collisions
         Resolver.preSolvePosition(pairs.list);
         for (i = 0; i < engine.positionIterations; i++) {
-            Resolver.solvePosition(pairs.list, timing.timeScale);
+            Resolver.solvePosition(pairs.list, allBodies, timing.timeScale);
         }
         Resolver.postSolvePosition(allBodies);
 
@@ -5319,7 +5293,7 @@ var Body = _dereq_('../body/Body');
 
 })();
 
-},{"../body/Body":1,"../body/Composite":2,"../body/World":3,"../collision/Grid":6,"../collision/Pairs":8,"../collision/Resolver":10,"../constraint/Constraint":12,"../render/Render":31,"./Common":14,"./Events":16,"./Metrics":18,"./Sleeping":22}],16:[function(_dereq_,module,exports){
+},{"../body/Body":1,"../body/Composite":2,"../body/World":3,"../collision/Grid":5,"../collision/Pairs":7,"../collision/Resolver":9,"../constraint/Constraint":11,"../render/Render":30,"./Common":13,"./Events":15,"./Metrics":17,"./Sleeping":21}],15:[function(_dereq_,module,exports){
 /**
 * The `Matter.Events` module contains methods to fire and listen to events on other objects.
 *
@@ -5406,7 +5380,9 @@ var Common = _dereq_('./Common');
             callbacks,
             eventClone;
 
-        if (object.events) {
+        var events = object.events;
+        
+        if (events && Common.keys(events).length > 0) {
             if (!event)
                 event = {};
 
@@ -5414,7 +5390,7 @@ var Common = _dereq_('./Common');
 
             for (var i = 0; i < names.length; i++) {
                 name = names[i];
-                callbacks = object.events[name];
+                callbacks = events[name];
 
                 if (callbacks) {
                     eventClone = Common.clone(event, false);
@@ -5431,7 +5407,7 @@ var Common = _dereq_('./Common');
 
 })();
 
-},{"./Common":14}],17:[function(_dereq_,module,exports){
+},{"./Common":13}],16:[function(_dereq_,module,exports){
 /**
 * The `Matter` module is the top level namespace. It also includes a function for installing plugins on top of the library.
 *
@@ -5519,9 +5495,9 @@ var Common = _dereq_('./Common');
 
 })();
 
-},{"./Common":14,"./Plugin":20}],18:[function(_dereq_,module,exports){
+},{"./Common":13,"./Plugin":19}],17:[function(_dereq_,module,exports){
 
-},{"../body/Composite":2,"./Common":14}],19:[function(_dereq_,module,exports){
+},{"../body/Composite":2,"./Common":13}],18:[function(_dereq_,module,exports){
 /**
 * The `Matter.Mouse` module contains methods for creating and manipulating mouse inputs.
 *
@@ -5724,7 +5700,7 @@ var Common = _dereq_('../core/Common');
 
 })();
 
-},{"../core/Common":14}],20:[function(_dereq_,module,exports){
+},{"../core/Common":13}],19:[function(_dereq_,module,exports){
 /**
 * The `Matter.Plugin` module contains functions for registering and installing plugins on modules.
 *
@@ -6070,7 +6046,7 @@ var Common = _dereq_('./Common');
 
 })();
 
-},{"./Common":14}],21:[function(_dereq_,module,exports){
+},{"./Common":13}],20:[function(_dereq_,module,exports){
 /**
 * The `Matter.Runner` module is an optional utility which provides a game loop, 
 * that handles continuously updating a `Matter.Engine` for you within a browser.
@@ -6402,7 +6378,7 @@ var Common = _dereq_('./Common');
 
 })();
 
-},{"./Common":14,"./Engine":15,"./Events":16}],22:[function(_dereq_,module,exports){
+},{"./Common":13,"./Engine":14,"./Events":15}],21:[function(_dereq_,module,exports){
 /**
 * The `Matter.Sleeping` module contains methods to manage the sleeping state of bodies.
 *
@@ -6533,7 +6509,7 @@ var Events = _dereq_('./Events');
 
 })();
 
-},{"./Events":16}],23:[function(_dereq_,module,exports){
+},{"./Events":15}],22:[function(_dereq_,module,exports){
 /**
 * The `Matter.Bodies` module contains factory methods for creating rigid body models 
 * with commonly used body configurations (such as rectangles, circles and other polygons).
@@ -6870,7 +6846,7 @@ var decomp;
 
 })();
 
-},{"../body/Body":1,"../core/Common":14,"../geometry/Bounds":26,"../geometry/Vector":28,"../geometry/Vertices":29}],24:[function(_dereq_,module,exports){
+},{"../body/Body":1,"../core/Common":13,"../geometry/Bounds":25,"../geometry/Vector":27,"../geometry/Vertices":28}],23:[function(_dereq_,module,exports){
 /**
 * The `Matter.Composites` module contains factory methods for creating composite bodies
 * with commonly used configurations (such as stacks and chains).
@@ -7199,7 +7175,7 @@ var Bodies = _dereq_('./Bodies');
 
 })();
 
-},{"../body/Body":1,"../body/Composite":2,"../constraint/Constraint":12,"../core/Common":14,"./Bodies":23}],25:[function(_dereq_,module,exports){
+},{"../body/Body":1,"../body/Composite":2,"../constraint/Constraint":11,"../core/Common":13,"./Bodies":22}],24:[function(_dereq_,module,exports){
 /**
 * The `Matter.Axes` module contains methods for creating and manipulating sets of axes.
 *
@@ -7265,7 +7241,7 @@ var Common = _dereq_('../core/Common');
 
 })();
 
-},{"../core/Common":14,"../geometry/Vector":28}],26:[function(_dereq_,module,exports){
+},{"../core/Common":13,"../geometry/Vector":27}],25:[function(_dereq_,module,exports){
 /**
 * The `Matter.Bounds` module contains methods for creating and manipulating axis-aligned bounding boxes (AABB).
 *
@@ -7387,7 +7363,7 @@ module.exports = Bounds;
     
 })();
 
-},{}],27:[function(_dereq_,module,exports){
+},{}],26:[function(_dereq_,module,exports){
 /**
 * The `Matter.Svg` module contains methods for converting SVG images into an array of vector points.
 *
@@ -7614,7 +7590,7 @@ var Common = _dereq_('../core/Common');
     };
 
 })();
-},{"../core/Common":14,"../geometry/Bounds":26}],28:[function(_dereq_,module,exports){
+},{"../core/Common":13,"../geometry/Bounds":25}],27:[function(_dereq_,module,exports){
 /**
 * The `Matter.Vector` module contains methods for creating and manipulating vectors.
 * Vectors are the basis of all the geometry related operations in the engine.
@@ -7854,7 +7830,7 @@ module.exports = Vector;
     ];
 
 })();
-},{}],29:[function(_dereq_,module,exports){
+},{}],28:[function(_dereq_,module,exports){
 /**
 * The `Matter.Vertices` module contains methods for creating and manipulating sets of vertices.
 * A set of vertices is an array of `Matter.Vector` with additional indexing properties inserted by `Vertices.create`.
@@ -7901,8 +7877,15 @@ var Common = _dereq_('../core/Common');
                     y: point.y,
                     index: i,
                     body: body,
-                    isInternal: false
+                    isInternal: false,
+                    contact: null
                 };
+
+            vertex.contact = {
+                vertex: vertex,
+                normalImpulse: 0,
+                tangentImpulse: 0
+            };
 
             vertices.push(vertex);
         }
@@ -8302,15 +8285,13 @@ var Common = _dereq_('../core/Common');
     };
 
 })();
-
-},{"../core/Common":14,"../geometry/Vector":28}],30:[function(_dereq_,module,exports){
+},{"../core/Common":13,"../geometry/Vector":27}],29:[function(_dereq_,module,exports){
 var Matter = module.exports = _dereq_('../core/Matter');
 
 Matter.Body = _dereq_('../body/Body');
 Matter.Composite = _dereq_('../body/Composite');
 Matter.World = _dereq_('../body/World');
 
-Matter.Contact = _dereq_('../collision/Contact');
 Matter.Detector = _dereq_('../collision/Detector');
 Matter.Grid = _dereq_('../collision/Grid');
 Matter.Pairs = _dereq_('../collision/Pairs');
@@ -8353,7 +8334,7 @@ Matter.World.addConstraint = Matter.Composite.addConstraint;
 Matter.World.clear = Matter.Composite.clear;
 Matter.Engine.run = Matter.Runner.run;
 
-},{"../body/Body":1,"../body/Composite":2,"../body/World":3,"../collision/Contact":4,"../collision/Detector":5,"../collision/Grid":6,"../collision/Pair":7,"../collision/Pairs":8,"../collision/Query":9,"../collision/Resolver":10,"../collision/SAT":11,"../constraint/Constraint":12,"../constraint/MouseConstraint":13,"../core/Common":14,"../core/Engine":15,"../core/Events":16,"../core/Matter":17,"../core/Metrics":18,"../core/Mouse":19,"../core/Plugin":20,"../core/Runner":21,"../core/Sleeping":22,"../factory/Bodies":23,"../factory/Composites":24,"../geometry/Axes":25,"../geometry/Bounds":26,"../geometry/Svg":27,"../geometry/Vector":28,"../geometry/Vertices":29,"../render/Render":31,"../render/RenderPixi":32}],31:[function(_dereq_,module,exports){
+},{"../body/Body":1,"../body/Composite":2,"../body/World":3,"../collision/Detector":4,"../collision/Grid":5,"../collision/Pair":6,"../collision/Pairs":7,"../collision/Query":8,"../collision/Resolver":9,"../collision/SAT":10,"../constraint/Constraint":11,"../constraint/MouseConstraint":12,"../core/Common":13,"../core/Engine":14,"../core/Events":15,"../core/Matter":16,"../core/Metrics":17,"../core/Mouse":18,"../core/Plugin":19,"../core/Runner":20,"../core/Sleeping":21,"../factory/Bodies":22,"../factory/Composites":23,"../geometry/Axes":24,"../geometry/Bounds":25,"../geometry/Svg":26,"../geometry/Vector":27,"../geometry/Vertices":28,"../render/Render":30,"../render/RenderPixi":31}],30:[function(_dereq_,module,exports){
 /**
 * The `Matter.Render` module is a simple HTML5 canvas based renderer for visualising instances of `Matter.Engine`.
 * It is intended for development and debugging purposes, but may also be suitable for simple games.
@@ -8965,7 +8946,7 @@ var Mouse = _dereq_('../core/Mouse');
                 continue;
 
             // handle compound parts
-            for (k = body.parts.length > 1 ? 1 : 0; k < body.parts.length; k++) {
+            for (k = 0; k < body.parts.length; k++) {
                 part = body.parts[k];
 
                 if (!part.render.visible)
@@ -9840,7 +9821,7 @@ var Mouse = _dereq_('../core/Mouse');
 
 })();
 
-},{"../body/Composite":2,"../collision/Grid":6,"../core/Common":14,"../core/Events":16,"../core/Mouse":19,"../geometry/Bounds":26,"../geometry/Vector":28}],32:[function(_dereq_,module,exports){
+},{"../body/Composite":2,"../collision/Grid":5,"../core/Common":13,"../core/Events":15,"../core/Mouse":18,"../geometry/Bounds":25,"../geometry/Vector":27}],31:[function(_dereq_,module,exports){
 /**
 * The `Matter.RenderPixi` module is an example renderer using pixi.js.
 * See also `Matter.Render` for a canvas based renderer.
@@ -10357,5 +10338,5 @@ var Vector = _dereq_('../geometry/Vector');
 
 })();
 
-},{"../body/Composite":2,"../core/Common":14,"../core/Events":16,"../geometry/Bounds":26,"../geometry/Vector":28}]},{},[30])(30)
+},{"../body/Composite":2,"../core/Common":13,"../core/Events":15,"../geometry/Bounds":25,"../geometry/Vector":27}]},{},[29])(29)
 });
